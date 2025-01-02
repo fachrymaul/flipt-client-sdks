@@ -17,7 +17,8 @@ import (
 var (
 	architecture string
 	sdks         string
-	sdkToFn      = map[string]integrationTestFn{
+
+	sdkToFn = map[string]integrationTestFn{
 		"python":  pythonTests,
 		"go":      goTests,
 		"node":    nodeTests,
@@ -27,7 +28,9 @@ var (
 		"dart":    dartTests,
 		"react":   reactTests,
 		"csharp":  csharpTests,
+		"kotlin":  kotlinAndroidTests,
 	}
+
 	sema = make(chan struct{}, 5)
 )
 
@@ -165,7 +168,7 @@ func getFFITestContainer(_ context.Context, client *dagger.Client, hostDirectory
 		}).
 		WithDirectory("/src/flipt-evaluation", hostDirectory.Directory("flipt-evaluation")).
 		WithFile("/src/Cargo.toml", hostDirectory.File("Cargo.toml")).
-		WithExec([]string{"cargo", "build", "-p", "flipt-engine-ffi", "--release"}) // Build the dynamic library
+		WithExec(strings.Fields("cargo build -p flipt-engine-ffi --release")) // Build the dynamic library
 }
 
 // getWasmTestContainer builds the wasm module for the Rust core, and the Flipt container for the client libraries to run
@@ -179,11 +182,11 @@ func getWasmTestContainer(_ context.Context, client *dagger.Client, hostDirector
 		}).
 		WithDirectory("/src/flipt-evaluation", hostDirectory.Directory("flipt-evaluation")).
 		WithFile("/src/Cargo.toml", hostDirectory.File("Cargo.toml")).
-		WithExec([]string{"cargo", "build", "-p", "flipt-engine-wasm", "--release"}) // Build the wasm module
+		WithExec(strings.Fields("cargo build -p flipt-engine-wasm --release")) // Build the wasm module
 
 	if architecture == "arm64" {
-		container = container.WithExec([]string{"apt-get", "update"}).
-			WithExec([]string{"apt-get", "-y", "install", "binaryen"})
+		container = container.WithExec(strings.Fields("apt-get update")).
+			WithExec(strings.Fields("apt-get -y install binaryen"))
 	}
 
 	return container.WithExec([]string{"cargo", "install", "wasm-pack"}). // Install wasm-pack
@@ -201,8 +204,8 @@ func pythonTests(ctx context.Context, root *dagger.Container, t *testCase) error
 		WithServiceBinding("flipt", t.flipt.WithExec(nil).AsService()).
 		WithEnvVariable("FLIPT_URL", "http://flipt:8080").
 		WithEnvVariable("FLIPT_AUTH_TOKEN", "secret").
-		WithExec([]string{"poetry", "install", "--without=dev"}).
-		WithExec([]string{"poetry", "run", "test"}).
+		WithExec(strings.Fields("poetry install --without=dev")).
+		WithExec(strings.Fields("poetry run test")).
 		Sync(ctx)
 
 	return err
@@ -224,8 +227,8 @@ func goTests(ctx context.Context, root *dagger.Container, t *testCase) error {
 		// modify the LD_LIBRARY_PATH variable to inform the linker different locations for
 		// dynamic libraries.
 		WithEnvVariable("LD_LIBRARY_PATH", fmt.Sprintf("/src/ext/linux_%s:$LD_LIBRARY_PATH", architecture)).
-		WithExec([]string{"go", "mod", "download"}).
-		WithExec([]string{"go", "test", "./..."}).
+		WithExec(strings.Fields("go mod download")).
+		WithExec(strings.Fields("go test ./...")).
 		Sync(ctx)
 
 	return err
@@ -244,9 +247,9 @@ func nodeTests(ctx context.Context, root *dagger.Container, t *testCase) error {
 		WithServiceBinding("flipt", t.flipt.WithExec(nil).AsService()).
 		WithEnvVariable("FLIPT_URL", "http://flipt:8080").
 		WithEnvVariable("FLIPT_AUTH_TOKEN", "secret").
-		WithExec([]string{"npm", "install"}).
-		WithExec([]string{"npm", "run", "build"}).
-		WithExec([]string{"npm", "test"}).
+		WithExec(strings.Fields("npm install")).
+		WithExec(strings.Fields("npm run build")).
+		WithExec(strings.Fields("npm test")).
 		Sync(ctx)
 
 	return err
@@ -261,8 +264,8 @@ func rubyTests(ctx context.Context, root *dagger.Container, t *testCase) error {
 		WithServiceBinding("flipt", t.flipt.WithExec(nil).AsService()).
 		WithEnvVariable("FLIPT_URL", "http://flipt:8080").
 		WithEnvVariable("FLIPT_AUTH_TOKEN", "secret").
-		WithExec([]string{"bundle", "install"}).
-		WithExec([]string{"bundle", "exec", "rspec"}).
+		WithExec(strings.Fields("bundle install")).
+		WithExec(strings.Fields("bundle exec rspec")).
 		Sync(ctx)
 
 	return err
@@ -285,7 +288,7 @@ func javaTests(ctx context.Context, root *dagger.Container, t *testCase) error {
 		WithServiceBinding("flipt", t.flipt.WithExec(nil).AsService()).
 		WithEnvVariable("FLIPT_URL", "http://flipt:8080").
 		WithEnvVariable("FLIPT_AUTH_TOKEN", "secret").
-		WithExec([]string{"gradle", "test"}).
+		WithExec(strings.Fields("gradle test")).
 		Sync(ctx)
 
 	return err
@@ -304,9 +307,9 @@ func browserTests(ctx context.Context, root *dagger.Container, t *testCase) erro
 		WithServiceBinding("flipt", t.flipt.WithExec(nil).AsService()).
 		WithEnvVariable("FLIPT_URL", "http://flipt:8080").
 		WithEnvVariable("FLIPT_AUTH_TOKEN", "secret").
-		WithExec([]string{"npm", "install"}).
-		WithExec([]string{"npm", "run", "build"}).
-		WithExec([]string{"npm", "test"}).
+		WithExec(strings.Fields("npm install")).
+		WithExec(strings.Fields("npm run build")).
+		WithExec(strings.Fields("npm test")).
 		Sync(ctx)
 
 	return err
@@ -320,9 +323,9 @@ func reactTests(ctx context.Context, root *dagger.Container, t *testCase) error 
 		WithDirectory("/src", t.dir.Directory("flipt-client-react"), dagger.ContainerWithDirectoryOpts{
 			Exclude: []string{".node_modules/", ".gitignore", "dist/"},
 		}).
-		WithExec([]string{"npm", "install"}).
-		WithExec([]string{"npm", "run", "build"}).
-		WithExec([]string{"npm", "test"}).
+		WithExec(strings.Fields("npm install")).
+		WithExec(strings.Fields("npm run build")).
+		WithExec(strings.Fields("npm test")).
 		Sync(ctx)
 
 	return err
@@ -339,8 +342,8 @@ func dartTests(ctx context.Context, root *dagger.Container, t *testCase) error {
 		WithServiceBinding("flipt", t.flipt.WithExec(nil).AsService()).
 		WithEnvVariable("FLIPT_URL", "http://flipt:8080").
 		WithEnvVariable("FLIPT_AUTH_TOKEN", "secret").
-		WithExec([]string{"dart", "pub", "get"}).
-		WithExec([]string{"dart", "test"}).
+		WithExec(strings.Fields("dart pub get")).
+		WithExec(strings.Fields("dart test")).
 		Sync(ctx)
 
 	return err
@@ -357,9 +360,9 @@ func csharpTests(ctx context.Context, root *dagger.Container, t *testCase) error
 		WithServiceBinding("flipt", t.flipt.WithExec(nil).AsService()).
 		WithEnvVariable("FLIPT_URL", "http://flipt:8080").
 		WithEnvVariable("FLIPT_AUTH_TOKEN", "secret").
-		WithExec([]string{"dotnet", "restore"}).
-		WithExec([]string{"dotnet", "build"}).
-		WithExec([]string{"dotnet", "test"}).
+		WithExec(strings.Fields("dotnet restore")).
+		WithExec(strings.Fields("dotnet build")).
+		WithExec(strings.Fields("dotnet test")).
 		Sync(ctx)
 
 	return err
@@ -378,8 +381,10 @@ func kotlinAndroidTests(ctx context.Context, root *dagger.Container, t *testCase
 		WithEnvVariable("ANDROID_HOME", "/sdk").
 		WithExec([]string{"mkdir", "-p", "/sdk/cmdline-tools"}).
 		WithExec(strings.Fields("wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip")).
-		WithExec(strings.Fields("unzip cmdline-tools.zip -d /sdk/cmdline-tools && mv /sdk/cmdline-tools/cmdline-tools /sdk/cmdline-tools/latest && rm cmdline-tools.zip")).
-		WithExec(strings.Fields("yes | /sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/sdk platform-tools platforms;android-33 build-tools;33.0.2")).
+		WithExec(strings.Fields("unzip cmdline-tools.zip -d /sdk/cmdline-tools")).
+		WithExec(strings.Fields("mv /sdk/cmdline-tools/cmdline-tools /sdk/cmdline-tools/latest")).
+		WithExec(strings.Fields("rm cmdline-tools.zip")).
+		WithExec([]string{"sh", "-c", "yes | /sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/sdk \"platform-tools\" \"platforms;android-33\" \"build-tools;33.0.2\""}).
 		WithWorkdir("/src").
 		WithDirectory("/src", t.dir.Directory("flipt-client-kotlin-android"), dagger.ContainerWithDirectoryOpts{
 			Exclude: []string{"./.idea/", ".gradle/", "build/"},
@@ -388,7 +393,7 @@ func kotlinAndroidTests(ctx context.Context, root *dagger.Container, t *testCase
 		WithServiceBinding("flipt", t.flipt.WithExec(nil).AsService()).
 		WithEnvVariable("FLIPT_URL", "http://flipt:8080").
 		WithEnvVariable("FLIPT_AUTH_TOKEN", "secret").
-		WithExec([]string{"./gradlew", "connectedAndroidTest"}).
+		WithExec(strings.Fields("./gradlew connectedAndroidTest")).
 		Sync(ctx)
 
 	return err
